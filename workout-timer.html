@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warm-Up Workout Timer</title>
+<style>
+  :root {
+    --bg: #12141c;
+    --card: #1b1f2b;
+    --accent: #5eead4;
+    --accent-dim: #2dd4bf33;
+    --text: #f2f4f8;
+    --muted: #8a90a3;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at top, #1e2233, var(--bg));
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .app {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border-radius: 24px;
+    padding: 28px 24px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  h1 {
+    font-size: 1.25rem;
+    text-align: center;
+    margin: 0 0 4px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .counter-label {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 20px;
+  }
+  .ring-wrap {
+    position: relative;
+    width: 240px;
+    height: 240px;
+    margin: 0 auto 20px;
+  }
+  svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+  .ring-bg { fill: none; stroke: #2a2f40; stroke-width: 10; }
+  .ring-fg {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.25s linear, stroke 0.3s ease;
+  }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .time {
+    font-size: 3rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .exercise-name {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 22px 0 4px;
+    text-align: center;
+    min-height: 1.6em;
+  }
+  .next-up {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    min-height: 1.3em;
+  }
+  .next-up span { color: var(--accent); font-weight: 600; }
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  button {
+    flex: 1;
+    border: none;
+    border-radius: 14px;
+    padding: 14px 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+  }
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #startBtn { background: var(--accent); color: #0b3b34; }
+  #pauseBtn { background: #33394d; color: var(--text); }
+  #resetBtn { background: #33394d; color: var(--danger); flex: 0.7; }
+  .toggle-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+  }
+  .toggle-row input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .list {
+    max-height: 220px;
+    overflow-y: auto;
+    border-top: 1px solid #2a2f40;
+    padding-top: 12px;
+  }
+  .list-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 6px;
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .list-item .num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2a2f40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+  }
+  .list-item.current {
+    background: var(--accent-dim);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .list-item.current .num { background: var(--accent); color: #0b3b34; }
+  .list-item.done { text-decoration: line-through; opacity: 0.5; }
+  .list-item.done .num::after { content: "✓"; }
+  .list::-webkit-scrollbar { width: 6px; }
+  .list::-webkit-scrollbar-thumb { background: #33394d; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Warm-Up Workout</h1>
+  <div class="counter-label" id="progressLabel">Exercise 1 of 14</div>
+
+  <div class="ring-wrap">
+    <svg viewBox="0 0 100 100">
+      <circle class="ring-bg" cx="50" cy="50" r="45"></circle>
+      <circle class="ring-fg" id="ringFg" cx="50" cy="50" r="45"></circle>
+    </svg>
+    <div class="ring-center">
+      <div class="time" id="timeDisplay">1:00</div>
+    </div>
+  </div>
+
+  <div class="exercise-name" id="exerciseName">Ready?</div>
+  <div class="next-up" id="nextUp">Tap Start to begin</div>
+
+  <div class="controls">
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn" disabled>Pause</button>
+    <button id="resetBtn">Reset</button>
+  </div>
+
+  <div class="toggle-row">
+    <input type="checkbox" id="voiceToggle" checked>
+    <label for="voiceToggle">Voice announcements</label>
+  </div>
+
+  <div class="list" id="list"></div>
+</div>
+
+<script>
+  const EXERCISES = [
+    "Body hops",
+    "Body waves",
+    "Arm swings",
+    "Trunk twist",
+    "Forward arm",
+    "Squats",
+    "Backward arms",
+    "Dead arms",
+    "Golf swings",
+    "Marches",
+    "Tiptoe arm swings",
+    "Twist the waist",
+    "Ballet arm swings",
+    "Back step wave lunges"
+  ];
+  const DURATION = 60;
+  const WARN_AT = 10;
+
+  const timeDisplay = document.getElementById('timeDisplay');
+  const exerciseNameEl = document.getElementById('exerciseName');
+  const nextUpEl = document.getElementById('nextUp');
+  const progressLabel = document.getElementById('progressLabel');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const voiceToggle = document.getElementById('voiceToggle');
+  const listEl = document.getElementById('list');
+  const ringFg = document.getElementById('ringFg');
+
+  const CIRC = 2 * Math.PI * 45;
+  ringFg.style.strokeDasharray = CIRC;
+
+  let index = -1;
+  let remaining = DURATION;
+  let timerId = null;
+  let running = false;
+  let warnedThisExercise = false;
+
+  function renderList() {
+    listEl.innerHTML = '';
+    EXERCISES.forEach((name, i) => {
+      const row = document.createElement('div');
+      row.className = 'list-item' + (i === index ? ' current' : '') + (i < index ? ' done' : '');
+      row.innerHTML = `<span class="num">${i < index ? '' : i + 1}</span><span>${name}</span>`;
+      listEl.appendChild(row);
+    });
+    const current = listEl.querySelector('.current');
+    if (current) current.scrollIntoView({ block: 'nearest' });
+  }
+
+  function updateRing() {
+    const frac = remaining / DURATION;
+    ringFg.style.strokeDashoffset = CIRC * (1 - frac);
+    ringFg.style.stroke = remaining <= WARN_AT ? '#fbbf24' : 'var(--accent)';
+  }
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  function speak(text) {
+    if (!voiceToggle.checked || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.0;
+    utter.pitch = 1.0;
+    window.speechSynthesis.speak(utter);
+  }
+
+  function beep(freq = 880, duration = 150) {
+    try {
+      const ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration / 1000);
+      osc.start();
+      osc.stop(ctx.currentTime + duration / 1000);
+    } catch (e) { /* audio unavailable */ }
+  }
+
+  function updateDisplay() {
+    timeDisplay.textContent = formatTime(remaining);
+    updateRing();
+    exerciseNameEl.textContent = EXERCISES[index];
+    progressLabel.textContent = `Exercise ${index + 1} of ${EXERCISES.length}`;
+    const next = EXERCISES[index + 1];
+    nextUpEl.innerHTML = next ? `Next: <span>${next}</span>` : 'Last exercise — finish strong!';
+    renderList();
+  }
+
+  function startExercise(i, announce) {
+    index = i;
+    remaining = DURATION;
+    warnedThisExercise = false;
+    updateDisplay();
+    beep(880, 180);
+    if (announce) speak(EXERCISES[index]);
+  }
+
+  function tick() {
+    remaining--;
+    if (remaining === WARN_AT && !warnedThisExercise) {
+      warnedThisExercise = true;
+      const next = EXERCISES[index + 1];
+      if (next) speak(`10 seconds. Next up: ${next}`);
+      else speak('10 seconds left. Almost done!');
+    }
+    if (remaining <= 0) {
+      if (index + 1 < EXERCISES.length) {
+        startExercise(index + 1, true);
+      } else {
+        finishWorkout();
+        return;
+      }
+    }
+    updateDisplay();
+  }
+
+  function finishWorkout() {
+    stopTimer();
+    exerciseNameEl.textContent = 'Workout complete! 🎉';
+    nextUpEl.textContent = 'Great job!';
+    timeDisplay.textContent = '0:00';
+    beep(1046, 300);
+    speak('Workout complete. Great job!');
+    startBtn.disabled = true;
+    pauseBtn.disabled = true;
+  }
+
+  function stopTimer() {
+    running = false;
+    if (timerId) clearInterval(timerId);
+    timerId = null;
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (running) return;
+    running = true;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = 'Pause';
+    if (index === -1) {
+      startExercise(0, true);
+    }
+    timerId = setInterval(tick, 1000);
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if (running) {
+      stopTimer();
+      pauseBtn.textContent = 'Resume';
+      startBtn.disabled = false;
+      startBtn.textContent = 'Resume';
+      window.speechSynthesis.cancel();
+    } else {
+      running = true;
+      startBtn.disabled = true;
+      pauseBtn.textContent = 'Pause';
+      timerId = setInterval(tick, 1000);
+    }
+  });
+
+  resetBtn.addEventListener('click', () => {
+    stopTimer();
+    window.speechSynthesis.cancel();
+    index = -1;
+    remaining = DURATION;
+    startBtn.disabled = false;
+    startBtn.textContent = 'Start';
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = 'Pause';
+    exerciseNameEl.textContent = 'Ready?';
+    nextUpEl.textContent = 'Tap Start to begin';
+    timeDisplay.textContent = formatTime(DURATION);
+    progressLabel.textContent = `Exercise 1 of ${EXERCISES.length}`;
+    ringFg.style.strokeDashoffset = 0;
+    renderList();
+  });
+
+  renderList();
+  updateRing();
+</script>
+</body>
+</html>
