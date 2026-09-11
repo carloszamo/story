@@ -232,6 +232,27 @@
   let timerId = null;
   let running = false;
   let warnedThisExercise = false;
+  let wakeLock = null;
+
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) { /* wake lock unavailable or blocked; workout still works */ }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release();
+      wakeLock = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running) requestWakeLock();
+  });
 
   function renderList() {
     listEl.innerHTML = '';
@@ -321,6 +342,7 @@
 
   function finishWorkout() {
     stopTimer();
+    releaseWakeLock();
     exerciseNameEl.textContent = 'Workout complete! 🎉';
     nextUpEl.textContent = 'Great job!';
     timeDisplay.textContent = '0:00';
@@ -342,6 +364,7 @@
     startBtn.disabled = true;
     pauseBtn.disabled = false;
     pauseBtn.textContent = 'Pause';
+    requestWakeLock();
     if (index === -1) {
       startExercise(0, true);
     }
@@ -351,6 +374,7 @@
   pauseBtn.addEventListener('click', () => {
     if (running) {
       stopTimer();
+      releaseWakeLock();
       pauseBtn.textContent = 'Resume';
       startBtn.disabled = false;
       startBtn.textContent = 'Resume';
@@ -359,12 +383,14 @@
       running = true;
       startBtn.disabled = true;
       pauseBtn.textContent = 'Pause';
+      requestWakeLock();
       timerId = setInterval(tick, 1000);
     }
   });
 
   resetBtn.addEventListener('click', () => {
     stopTimer();
+    releaseWakeLock();
     window.speechSynthesis.cancel();
     index = -1;
     remaining = DURATION;
