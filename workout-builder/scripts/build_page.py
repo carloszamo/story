@@ -29,11 +29,19 @@ import mimetypes
 import sys
 from pathlib import Path
 
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "workout_template.html"
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+TEMPLATE_PATH = TEMPLATE_DIR / "workout_template.html"
+WAKE_VIDEO_MP4 = TEMPLATE_DIR / "assets" / "wake.mp4"
+WAKE_VIDEO_WEBM = TEMPLATE_DIR / "assets" / "wake.webm"
 
 
 def image_to_data_uri(path: Path) -> str:
     mime = mimetypes.guess_type(path.name)[0] or "image/jpeg"
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{data}"
+
+
+def file_to_data_uri(path: Path, mime: str) -> str:
     data = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime};base64,{data}"
 
@@ -74,6 +82,8 @@ def build(workout_path: Path, out_path: Path):
         .replace("__SOURCE_LINK__", source_link_html)
         .replace("__COUNT__", str(len(exercises)))
         .replace("__EXERCISES_JSON__", json.dumps(exercises))
+        .replace("__WAKE_VIDEO_MP4__", file_to_data_uri(WAKE_VIDEO_MP4, "video/mp4"))
+        .replace("__WAKE_VIDEO_WEBM__", file_to_data_uri(WAKE_VIDEO_WEBM, "video/webm"))
     )
     out_path.write_text(html)
     print(f"Wrote {out_path} ({len(exercises)} exercises, {sum(e['duration'] for e in exercises)}s total)")
