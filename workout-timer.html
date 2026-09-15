@@ -270,9 +270,14 @@
   async function requestWakeLock() {
     try {
       if ('wakeLock' in navigator) {
-        if (wakeLock) { try { await wakeLock.release(); } catch (e) {} }
-        wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.addEventListener('release', () => { wakeLock = null; nativeWakeLockOK = false; updateWakeStatus(); });
+        // Only acquire a fresh lock if we don't already hold a live one --
+        // releasing and immediately re-requesting on every periodic tick
+        // opens a brief gap with no lock held at all, which is itself
+        // enough to let the phone sleep on some devices.
+        if (!wakeLock || wakeLock.released) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => { wakeLock = null; nativeWakeLockOK = false; updateWakeStatus(); });
+        }
         nativeWakeLockOK = true;
       }
     } catch (e) {
@@ -287,8 +292,8 @@
     updateWakeStatus();
     // Some mobile browsers silently drop the wake lock (or stall the
     // fallback video) without firing any event we can listen for, so
-    // re-assert both every 20s as a safety net rather than trusting
-    // either to hold for the whole workout.
+    // check every 20s as a safety net -- but only re-acquire what's
+    // actually missing, never force a fresh lock that's already held.
     if (!wakeRefreshTimer) {
       wakeRefreshTimer = setInterval(() => { if (running) requestWakeLock(); }, 20000);
     }
