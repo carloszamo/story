@@ -344,6 +344,13 @@
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 1.0;
     utter.pitch = 1.0;
+    // Speaking hands the phone's audio session to TTS, which can knock out
+    // both the fallback video and the native wake lock on the handoff back.
+    // Reclaim both right as speech ends, rather than waiting for the next
+    // periodic refresh.
+    const reclaim = () => { if (running) setTimeout(() => { if (running) requestWakeLock(); }, 250); };
+    utter.onend = reclaim;
+    utter.onerror = reclaim;
     window.speechSynthesis.speak(utter);
   }
 
