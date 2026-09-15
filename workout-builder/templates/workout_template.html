@@ -288,9 +288,12 @@
     }
   }
 
+  let wakeRefreshTimer = null;
+
   async function requestWakeLock() {
     try {
       if ('wakeLock' in navigator) {
+        if (wakeLock) { try { await wakeLock.release(); } catch (e) {} }
         wakeLock = await navigator.wakeLock.request('screen');
         wakeLock.addEventListener('release', () => { wakeLock = null; nativeWakeLockOK = false; updateWakeStatus(); });
         nativeWakeLockOK = true;
@@ -299,15 +302,26 @@
       nativeWakeLockOK = false;
     }
     try {
-      await wakeVideo.play();
+      if (wakeVideo.paused) await wakeVideo.play();
       videoWakeLockOK = true;
     } catch (e) {
       videoWakeLockOK = false;
     }
     updateWakeStatus();
+    // Some mobile browsers silently drop the wake lock (or stall the
+    // fallback video) without firing any event we can listen for, so
+    // re-assert both every 20s as a safety net rather than trusting
+    // either to hold for the whole workout.
+    if (!wakeRefreshTimer) {
+      wakeRefreshTimer = setInterval(() => { if (running) requestWakeLock(); }, 20000);
+    }
   }
 
   function releaseWakeLock() {
+    if (wakeRefreshTimer) {
+      clearInterval(wakeRefreshTimer);
+      wakeRefreshTimer = null;
+    }
     if (wakeLock) {
       wakeLock.release();
       wakeLock = null;
