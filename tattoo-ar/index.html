@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<!--APP-START-->
+<title>Tattoo Try-On</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500&family=Pinyon+Script&family=UnifrakturMaguntia&family=Special+Elite&display=swap">
+<style>
+/* Layout: full-bleed camera stage with a bottom control sheet, like a viewfinder over a flash sheet. */
+:root {
+  --ink: #111013;          /* page ground, tattoo-ink black */
+  --sheet: #1b191f;        /* control sheet */
+  --raise: #26232c;        /* raised controls */
+  --line: #34303b;         /* hairlines */
+  --fg: #f2eef4;           /* text */
+  --muted: #a49cab;        /* secondary text */
+  --stencil: #8b6dff;      /* transfer-stencil violet, the accent */
+  --stencil-soft: rgba(139,109,255,.18);
+  --danger: #ff8a7a;
+  --font-display: "Pirata One", "UnifrakturMaguntia", Georgia, serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--font-body); font-size: 14px; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--stencil); outline-offset: 2px; }
+
+.app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+.stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #000; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; cursor: grab; }
+#cv:active { cursor: grabbing; }
+video { display: none; }
+
+.topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px); padding-bottom: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(rgba(10,9,12,.75), rgba(10,9,12,0));
+  pointer-events: none;
+}
+.topbar > * { pointer-events: auto; }
+.mark { font-family: var(--font-display); font-size: 26px; line-height: 1; letter-spacing: .01em; white-space: nowrap; }
+.mark span { color: var(--stencil); }
+.seg { display: flex; background: rgba(27,25,31,.82); border: 1px solid var(--line); border-radius: 999px; padding: 3px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.seg button { border: 0; background: transparent; padding: 7px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--ink); }
+
+.status {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 2;
+  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  max-width: min(92%, 420px); text-align: center;
+  background: rgba(27,25,31,.9); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 12px; font-size: 13px; line-height: 1.4; color: var(--fg);
+}
+.status.warn { border-color: var(--danger); }
+.hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: 76px; z-index: 2; font-size: 12px; color: var(--muted); background: rgba(17,16,19,.7); padding: 6px 10px; border-radius: 999px; white-space: nowrap; pointer-events: none; transition: opacity .4s; }
+
+.fab { position: absolute; z-index: 2; bottom: 12px; display: flex; gap: 10px; right: max(16px, env(safe-area-inset-right, 0px)); }
+.fab button { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--line); background: rgba(27,25,31,.88); display: grid; place-items: center; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.fab button.shoot { background: var(--fg); color: var(--ink); border: 0; }
+.fab button[aria-pressed="true"] { background: var(--stencil); border-color: var(--stencil); color: #fff; }
+.fab svg { width: 22px; height: 22px; }
+.fab-left { left: max(16px, env(safe-area-inset-left, 0px)); right: auto; }
+
+.sheet {
+  background: var(--sheet); border-top: 1px solid var(--line);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 10px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; border: 0; background: none; padding: 8px 4px 10px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--stencil); }
+.pane { min-height: 132px; }
+[hidden] { display: none !important; }
+
+.flash { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.flash button { aspect-ratio: 1; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); background: #ebe6e1; padding: 6px; display: grid; place-items: center; position: relative; overflow: hidden; }
+.flash button img { width: 100%; height: 100%; object-fit: contain; }
+.flash button[aria-pressed="true"] { outline: 2px solid var(--stencil); outline-offset: 2px; }
+.flash .upload { background: var(--raise); color: var(--fg); font-size: 11px; font-weight: 600; gap: 2px; align-content: center; text-align: center; }
+.flash .upload svg { width: 22px; height: 22px; margin: 0 auto; }
+.textrow { display: flex; gap: 8px; margin-top: 10px; }
+.textrow input, .textrow select { background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; min-width: 0; }
+.textrow input { flex: 1; }
+.textrow button { background: var(--raise); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-weight: 600; white-space: nowrap; }
+
+.sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+.slider { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.slider label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.slider output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--fg); text-transform: none; letter-spacing: 0; }
+input[type="range"] { width: 100%; accent-color: var(--stencil); margin: 0; height: 24px; }
+.btnrow { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btnrow button, .chips button { background: var(--raise); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 13px; }
+.btnrow button[aria-pressed="true"], .chips button[aria-pressed="true"] { background: var(--stencil-soft); border-color: var(--stencil); color: var(--fg); }
+
+.chips { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+.chips button { border-radius: 12px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.chips small { font-weight: 400; color: var(--muted); font-size: 11px; }
+.toggle { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 13px; }
+.toggle input { accent-color: var(--stencil); width: 18px; height: 18px; }
+
+.result { position: fixed; inset: 0; z-index: 10; background: rgba(8,7,10,.94); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding-top: calc(env(safe-area-inset-top, 0px) + 16px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.result img { max-width: 100%; max-height: 70%; border-radius: 12px; border: 1px solid var(--line); -webkit-touch-callout: default; }
+.result p { margin: 0; color: var(--muted); font-size: 13px; text-align: center; }
+.result .btnrow { justify-content: center; margin: 0; }
+.result .primary { background: var(--fg); color: var(--ink); border-color: var(--fg); }
+
+@media (min-width: 900px) {
+  .app { flex-direction: row; }
+  .sheet { width: 360px; border-top: 0; border-left: 1px solid var(--line); overflow-y: auto; padding-block: 16px; }
+  .flash { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .sliders { grid-template-columns: 1fr; }
+}
+@media (max-height: 640px) and (max-width: 899px) { .pane { min-height: 0; } .flash { grid-template-columns: repeat(6, minmax(0,1fr)); } }
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+</style>
+
+<div class="app">
+  <div class="stage" id="stage">
+    <canvas id="cv" aria-label="Preview of the tattoo on your skin. Drag to move, pinch to resize and rotate."></canvas>
+    <video id="video" playsinline muted autoplay></video>
+
+    <div class="topbar">
+      <div class="mark">Tattoo <span>Try-On</span></div>
+      <div class="seg" role="group" aria-label="Background">
+        <button id="srcLive" aria-pressed="false">Live</button>
+        <button id="srcPhoto" aria-pressed="false">Photo</button>
+      </div>
+    </div>
+    <div class="status" id="status" hidden></div>
+    <div class="hint" id="hint">Drag to move · pinch to size &amp; rotate</div>
+
+    <div class="fab fab-left">
+      <button id="flipCam" title="Switch camera" aria-label="Switch camera" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-3h8l2 3h3v12H3z"/><path d="M9 13a3 3 0 0 1 5-2.2M15 13a3 3 0 0 1-5 2.2"/><path d="M14 9v2h-2M10 17v-2h2"/></svg>
+      </button>
+      <button id="freeze" title="Freeze frame" aria-label="Freeze frame" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+    </div>
+    <div class="fab">
+      <button class="shoot" id="shoot" title="Save picture" aria-label="Save picture">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-design" aria-selected="true" aria-controls="pane-design">Design</button>
+      <button role="tab" id="tab-fit" aria-selected="false" aria-controls="pane-fit">Fit</button>
+      <button role="tab" id="tab-ink" aria-selected="false" aria-controls="pane-ink">Ink</button>
+    </div>
+
+    <div class="pane" id="pane-design" role="tabpanel">
+      <div class="flash" id="flash">
+        <button class="upload" id="uploadBtn" aria-label="Upload your own design">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>
+          Upload
+        </button>
+      </div>
+      <div class="textrow">
+        <input id="scriptText" type="text" maxlength="40" value="Amor fati" aria-label="Lettering">
+        <select id="scriptFont" aria-label="Lettering style">
+          <option value="Pinyon Script">Script</option>
+          <option value="UnifrakturMaguntia">Blackletter</option>
+          <option value="Special Elite">Typewriter</option>
+        </select>
+        <button id="scriptGo">Letter it</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-fit" role="tabpanel" hidden>
+      <div class="sliders">
+        <div class="slider"><label for="sSize">Size <output id="oSize"></output></label><input id="sSize" type="range" min="5" max="120" step="1"></div>
+        <div class="slider"><label for="sRot">Rotate <output id="oRot"></output></label><input id="sRot" type="range" min="-180" max="180" step="1"></div>
+        <div class="slider"><label for="sWrap">Wrap around limb <output id="oWrap"></output></label><input id="sWrap" type="range" min="0" max="100" step="1"></div>
+        <div class="slider"><label for="sOpacity">Ink strength <output id="oOpacity"></output></label><input id="sOpacity" type="range" min="10" max="100" step="1"></div>
+      </div>
+      <div class="btnrow">
+        <button id="mirror" aria-pressed="false">Mirror design</button>
+        <button id="center">Re-center</button>
+      </div>
+    </div>
+
+    <div class="pane" id="pane-ink" role="tabpanel" hidden>
+      <div class="chips" id="inkChips">
+        <button data-ink="stencil">Stencil<small>transfer</small></button>
+        <button data-ink="fresh">Fresh<small>black</small></button>
+        <button data-ink="healed">Healed<small>~5 yrs</small></button>
+        <button data-ink="color">Color<small>as drawn</small></button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="removeBg" checked> Remove white background from uploads</label>
+      <div class="slider" style="margin-top:10px"><label for="sThr">Background cut-off <output id="oThr"></output></label><input id="sThr" type="range" min="50" max="99" step="1"></div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="designFile" accept="image/*" hidden>
+<input type="file" id="photoFile" accept="image/*" hidden>
+
+<div class="result" id="result" hidden>
+  <img id="resultImg" alt="Your tattoo preview">
+  <p id="resultNote">Press and hold the picture to save it.</p>
+  <div class="btnrow">
+    <button class="primary" id="saveBtn">Save</button>
+    <button id="shareBtn" hidden>Share</button>
+    <button id="closeResult">Back</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  const video = $("video");
+  const stageEl = $("stage");
+
+  const state = {
+    src: "demo",          // demo | live | photo
+    facing: "user",
+    stream: null,
+    frozen: null,         // canvas holding a frozen video frame
+    photo: null,          // uploaded background image
+    raw: null,            // design as drawn (canvas)
+    processed: null,      // design after ink processing (canvas)
+    designId: null,
+    x: 0.5, y: 0.48,      // centre, as fraction of stage
+    scale: 0.42,          // design width as fraction of the stage's short side
+    rot: -0.08,           // radians
+    wrap: 0.45,           // 0..1 cylinder wrap
+    opacity: 0.88,
+    mirror: false,
+    ink: "fresh",
+    removeBg: true,
+    thr: 0.86,
+  };
+
+  // ---------- Sizing ----------
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const r = stageEl.getBoundingClientRect();
+    W = Math.max(1, Math.round(r.width * DPR));
+    H = Math.max(1, Math.round(r.height * DPR));
+    cv.width = W; cv.height = H;
+    wrapCache.key = "";
+  }
+  new ResizeObserver(resize).observe(stageEl);
+
+  // ---------- Status ----------
+  let statusTimer = 0;
+  function say(msg, warn = false, ms = 4200) {
+    const s = $("status");
+    s.textContent = msg; s.classList.toggle("warn", warn); s.hidden = false;
+    clearTimeout(statusTimer);
+    if (ms) statusTimer = setTimeout(() => { s.hidden = true; }, ms);
+  }
+
+  // ---------- Demo skin ----------
+  // A shaded forearm so the first frame shows a tattoo on something skin-like.
+  const demo = document.createElement("canvas");
+  function buildDemo() {
+    const w = 900, h = 1400; demo.width = w; demo.height = h;
+    const c = demo.getContext("2d");
+    const bg = c.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#2a2530"); bg.addColorStop(1, "#141217");
+    c.fillStyle = bg; c.fillRect(0, 0, w, h);
+    c.save();
+    c.translate(w / 2, h / 2); c.rotate(-0.12);
+    const aw = 520, ah = 1700;
+    const g = c.createLinearGradient(-aw / 2, 0, aw / 2, 0);
+    g.addColorStop(0, "#7a4b35"); g.addColorStop(0.18, "#b77b5c"); g.addColorStop(0.5, "#d9a07f");
+    g.addColorStop(0.78, "#c48867"); g.addColorStop(1, "#6e412d");
+    c.fillStyle = g;
+    c.beginPath();
+    c.moveTo(-aw / 2 + 40, -ah / 2); c.bezierCurveTo(-aw / 2 - 30, -100, -aw / 2 + 10, 300, -aw / 2 + 70, ah / 2);
+    c.lineTo(aw / 2 - 70, ah / 2); c.bezierCurveTo(aw / 2 - 10, 300, aw / 2 + 30, -100, aw / 2 - 40, -ah / 2);
+    c.closePath(); c.fill();
+    c.restore();
+    // pore/skin noise
+    const id = c.getImageData(0, 0, w, h), d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = (Math.random() - 0.5) * 14;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    c.putImageData(id, 0, 0);
+  }
+  buildDemo();
+
+  // ---------- Flash designs (procedural line art, black on transparent) ----------
+  const S = 1024;
+  function sheet() { const c = document.createElement("canvas"); c.width = S; c.height = S; const x = c.getContext("2d"); x.strokeStyle = x.fillStyle = "#000"; x.lineCap = "round"; x.lineJoin = "round"; return [c, x]; }
+
+  function drawMandala() {
+    const [c, x] = sheet(); x.translate(S / 2, S / 2);
+    x.lineWidth = 9;
+    [70, 150, 330, 470].forEach(r => { x.beginPath(); x.arc(0, 0, r, 0, Math.PI * 2); x.stroke(); });
+    x.beginPath(); x.arc(0, 0, 36, 0, Math.PI * 2); x.fill();
+    const petal = (n, r0, r1, wd) => { for (let i = 0; i < n; i++) { x.save(); x.rotate(i * Math.PI * 2 / n); x.beginPath(); x.moveTo(0, -r0); x.quadraticCurveTo(wd, -(r0 + r1) / 2, 0, -r1); x.quadraticCurveTo(-wd, -(r0 + r1) / 2, 0, -r0); x.stroke(); x.restore(); } };
+    petal(8, 70, 150, 40); petal(16, 150, 330, 52); petal(16, 330, 470, 40);
+    x.lineWidth = 5; petal(16, 170, 290, 20);
+    for (let i = 0; i < 32; i++) { x.save(); x.rotate(i * Math.PI / 16 + Math.PI / 32); x.beginPath(); x.arc(0, -400, 9, 0, Math.PI * 2); x.fill(); x.restore(); }
+    for (let i = 0; i < 48; i++) { x.save(); x.rotate(i * Math.PI / 24); x.beginPath(); x.arc(0, -495, 6, 0, Math.PI * 2); x.fill(); x.restore(); }
+    return c;
+  }
+  function drawPeaks() {
+    const [c, x] = sheet(); x.translate(S / 2, S / 2);
+    const R = 420; x.lineWidth = 12;
+    x.beginPath(); x.arc(0, 0, R, 0, Math.PI * 2); x.stroke();
+    x.save(); x.beginPath(); x.arc(0, 0, R - 6, 0, Math.PI * 2); x.clip();
+    x.lineWidth = 8;
+    x.beginPath(); x.arc(110, -150, 70, 0, Math.PI * 2); x.stroke();
+    for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(-R, -40 + i * 26 - 230); x.lineTo(-20 - i * 30, -40 + i * 26 - 230); x.stroke(); }
+    const ridge = [[-R, 180], [-250, 20], [-170, 80], [-40, -130], [70, 30], [150, -40], [R, 160]];
+    x.lineWidth = 11; x.beginPath(); ridge.forEach(([a, b], i) => i ? x.lineTo(a, b) : x.moveTo(a, b)); x.stroke();
+    x.lineWidth = 6;
+    for (let k = 1; k < ridge.length - 1; k++) { const [a, b] = ridge[k]; for (let j = 1; j <= 6; j++) { x.beginPath(); x.moveTo(a, b + j * 4); x.lineTo(a + 10 - j * 30, b + 40 + j * 34); x.stroke(); } }
+    x.lineWidth = 7;
+    for (let i = 0; i < 7; i++) { const y = 230 + i * 32; x.beginPath(); for (let t = -R; t <= R; t += 8) { const yy = y + Math.sin(t / 38 + i) * 7; t === -R ? x.moveTo(t, yy) : x.lineTo(t, yy); } x.stroke(); }
+    x.restore();
+    return c;
+  }
+  function star(x, cx, cy, r, n = 5, inner = 0.42) { x.beginPath(); for (let i = 0; i < n * 2; i++) { const rr = i % 2 ? r * inner : r; const a = -Math.PI / 2 + i * Math.PI / n; x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } x.closePath(); }
+  function drawMoon() {
+    const [c, x] = sheet(); x.translate(S / 2, S / 2);
+    x.beginPath(); x.arc(-40, 0, 330, 0, Math.PI * 2); x.arc(70, -60, 290, 0, Math.PI * 2, true); x.fill("evenodd");
+    x.globalCompositeOperation = "destination-out";
+    x.beginPath(); x.arc(70, -60, 290, 0, Math.PI * 2); x.fill();
+    x.globalCompositeOperation = "source-over";
+    x.lineWidth = 6; x.setLineDash([2, 22]);
+    x.beginPath(); x.arc(-40, 0, 420, -1.2, 2.6); x.stroke(); x.setLineDash([]);
+    star(x, 230, 120, 70); x.fill();
+    star(x, 140, -260, 38); x.fill();
+    star(x, 330, -60, 26, 4, .3); x.fill();
+    star(x, 260, 320, 30, 4, .3); x.fill();
+    x.lineWidth = 8; star(x, -320, -330, 44); x.stroke();
+    return c;
+  }
+  function drawCompass() {
+    const [c, x] = sheet(); x.translate(S / 2, S / 2 + 30);
+    x.lineWidth = 9; x.beginPath(); x.arc(0, 0, 300, 0, Math.PI * 2); x.stroke();
+    x.lineWidth = 4; x.beginPath(); x.arc(0, 0, 278, 0, Math.PI * 2); x.stroke();
+    for (let i = 0; i < 72; i++) { x.save(); x.rotate(i * Math.PI / 36); x.lineWidth = i % 9 === 0 ? 7 : 4; x.beginPath(); x.moveTo(0, -278); x.lineTo(0, i % 9 === 0 ? -250 : -262); x.stroke(); x.restore(); }
+    const pt = (len, wd, half) => { x.beginPath(); x.moveTo(0, -len); x.lineTo(half === "l" ? -wd : wd, -wd * 0.9); x.lineTo(0, 0); x.closePath(); };
+    for (let i = 0; i < 8; i++) {
+      const len = i % 2 ? 230 : 420, wd = i % 2 ? 40 : 62;
+      x.save(); x.rotate(i * Math.PI / 4);
+      pt(len, wd, "l"); x.fill();
+      x.lineWidth = 6; pt(len, wd, "r"); x.stroke();
+      x.restore();
+    }
+    x.fillStyle = "#fff"; x.beginPath(); x.arc(0, 0, 26, 0, Math.PI * 2); x.fill();
+    x.fillStyle = "#000"; x.lineWidth = 7; x.stroke();
+    x.font = "120px 'Pirata One', Georgia, serif"; x.textAlign = "center"; x.textBaseline = "alphabetic";
+    x.fillText("N", 0, -440);
+    return c;
+  }
+  function drawSwallow() {
+    const [c, x] = sheet(); x.translate(S / 2, S / 2); x.rotate(-0.25);
+    x.lineWidth = 10;
+    // body
+    x.beginPath(); x.moveTo(-300, -40);
+    x.bezierCurveTo(-220, -110, -80, -90, 40, -30);
+    x.bezierCurveTo(140, 20, 230, 70, 320, 70);
+    x.bezierCurveTo(230, 110, 120, 110, 30, 80);
+    x.bezierCurveTo(-90, 50, -230, 40, -300, -40); x.closePath(); x.stroke();
+    // head + eye + beak
+    x.beginPath(); x.moveTo(-300, -40); x.lineTo(-360, -30); x.lineTo(-296, -18); x.stroke();
+    x.beginPath(); x.arc(-262, -40, 9, 0, Math.PI * 2); x.fill();
+    // throat fill
+    x.beginPath(); x.moveTo(-296, -18); x.bezierCurveTo(-250, 20, -200, 30, -160, 30); x.bezierCurveTo(-200, -10, -240, -30, -296, -18); x.fill();
+    // forked tail
+    x.beginPath(); x.moveTo(300, 74); x.bezierCurveTo(380, 80, 440, 110, 500, 170); x.bezierCurveTo(430, 140, 380, 120, 320, 95); x.stroke();
+    x.beginPath(); x.moveTo(300, 74); x.bezierCurveTo(390, 50, 450, 30, 510, 10); x.bezierCurveTo(450, 60, 390, 80, 322, 86); x.stroke();
+    // upper wing
+    x.beginPath(); x.moveTo(-90, -70);
+    x.bezierCurveTo(-60, -260, 60, -400, 230, -470);
+    x.bezierCurveTo(150, -350, 110, -220, 60, -40); x.closePath(); x.stroke();
+    for (let i = 1; i <= 4; i++) { const t = i / 5; x.beginPath(); x.moveTo(-90 + 150 * t, -70 + 30 * t); x.quadraticCurveTo(-40 + 160 * t, -250 * (1 - t) - 120, 230 - 70 * t, -470 + 120 * t); x.lineWidth = 6; x.stroke(); }
+    x.lineWidth = 10;
+    // lower wing
+    x.beginPath(); x.moveTo(-40, 70);
+    x.bezierCurveTo(-60, 230, -10, 340, 90, 420);
+    x.bezierCurveTo(80, 300, 110, 190, 120, 95); x.closePath(); x.fill();
+    return c;
+  }
+  async function drawScript(text, font) {
+    try { await document.fonts.load(`200px "${font}"`, text); } catch (e) {}
+    const c = document.createElement("canvas"), x = c.getContext("2d");
+    const size = 220;
+    x.font = `${size}px "${font}", cursive`;
+    const m = x.measureText(text || " ");
+    c.width = Math.min(4000, Math.ceil(m.width + size * 0.8)); c.height = Math.ceil(size * 1.8);
+    x.font = `${size}px "${font}", cursive`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillStyle = "#000";
+    x.fillText(text || " ", c.width / 2, c.height / 2);
+    return c;
+  }
+
+  const FLASH = [
+    { id: "swallow", name: "Swallow", make: drawSwallow },
+    { id: "moon", name: "Moon & stars", make: drawMoon },
+    { id: "compass", name: "Compass", make: drawCompass },
+    { id: "peaks", name: "Peaks", make: drawPeaks },
+    { id: "mandala", name: "Mandala", make: drawMandala },
+  ];
+
+  // ---------- Ink processing ----------
+  function toCanvas(img, max = 1400) {
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+    const k = Math.min(1, max / Math.max(iw, ih));
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(iw * k)); c.height = Math.max(1, Math.round(ih * k));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
+  const smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  function blurAlpha(a, w, h, r) {
+    const tmp = new Float32Array(a.length), out = new Float32Array(a.length);
+    for (let y = 0; y < h; y++) { let s = 0; const row = y * w; for (let x = -r; x <= r; x++) s += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) { tmp[row + x] = s / (2 * r + 1); s += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)]; } }
+    for (let x = 0; x < w; x++) { let s = 0; for (let y = -r; y <= r; y++) s += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) { out[y * w + x] = s / (2 * r + 1); s += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x]; } }
+    return out;
+  }
+
+  function processDesign() {
+    const src = state.raw; if (!src) { state.processed = null; return; }
+    const w = src.width, h = src.height;
+    const sd = src.getContext("2d").getImageData(0, 0, w, h).data;
+    const n = w * h;
+    const A = new Float32Array(n);      // coverage 0..1
+    const R = new Uint8ClampedArray(n), G = new Uint8ClampedArray(n), B = new Uint8ClampedArray(n);
+    const cut = state.removeBg && state.userUpload;
+    for (let i = 0, p = 0; i < n; i++, p += 4) {
+      const r = sd[p], g = sd[p + 1], b = sd[p + 2];
+      let a = sd[p + 3] / 255;
+      const white = Math.min(r, g, b) / 255;
+      if (cut) a *= 1 - smooth(state.thr - 0.1, state.thr, white);
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      const dark = 1 - lum;
+      if (state.ink === "color") { R[i] = r; G[i] = g; B[i] = b; A[i] = a; }
+      else { A[i] = a * Math.min(1, 0.15 + dark * 1.1); }
+    }
+    let alpha = A;
+    let ink = [20, 18, 22];
+    if (state.ink === "healed") { alpha = blurAlpha(A, w, h, Math.max(1, Math.round(w / 500))); ink = [34, 42, 58]; for (let i = 0; i < n; i++) alpha[i] *= 0.82; }
+    if (state.ink === "stencil") {
+      // Outline only: keep pixels on the edge of the solid shape, like a thermal transfer.
+      const m = new Uint8Array(n); for (let i = 0; i < n; i++) m[i] = A[i] > 0.4 ? 1 : 0;
+      const rad = Math.max(2, Math.round(w / 300));
+      const er = blurAlpha(Float32Array.from(m), w, h, rad);
+      alpha = new Float32Array(n);
+      for (let i = 0; i < n; i++) alpha[i] = m[i] && er[i] < 0.995 ? 1 : 0;
+      alpha = blurAlpha(alpha, w, h, 1);
+      ink = [96, 62, 214];
+    }
+    // bounding box crop
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (alpha[y * w + x] > 0.03) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) { state.processed = null; say("That image looks empty after removing the background. Lower the background cut-off in Ink.", true); return; }
+    const pad = 4; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+    const ow = x1 - x0 + 1, oh = y1 - y0 + 1;
+    const out = document.createElement("canvas"); out.width = ow; out.height = oh;
+    const oc = out.getContext("2d"), od = oc.createImageData(ow, oh), o = od.data;
+    for (let y = 0; y < oh; y++) for (let x = 0; x < ow; x++) {
+      const i = (y + y0) * w + (x + x0), q = (y * ow + x) * 4;
+      if (state.ink === "color") { o[q] = R[i]; o[q + 1] = G[i]; o[q + 2] = B[i]; }
+      else { o[q] = ink[0]; o[q + 1] = ink[1]; o[q + 2] = ink[2]; }
+      o[q + 3] = Math.round(Math.min(1, alpha[i]) * 255);
+    }
+    oc.putImageData(od, 0, 0);
+    state.processed = out;
+    wrapCache.key = "";
+  }
+
+  // ---------- Wrap (cylinder projection), cached ----------
+  const wrapCache = { key: "", canvas: document.createElement("canvas") };
+  function wrapped(w, h) {
+    const t = state.processed;
+    const key = [w, h, state.wrap.toFixed(3), t && t.width, t && t.height, state.ink, state.designVersion].join("|");
+    if (key === wrapCache.key) return wrapCache.canvas;
+    const c = wrapCache.canvas; c.width = w; c.height = h;
+    const x = c.getContext("2d"); x.clearRect(0, 0, w, h);
+    x.imageSmoothingQuality = "high";
+    const A = state.wrap * 1.35;
+    if (A < 0.02) { x.drawImage(t, 0, 0, w, h); }
+    else {
+      const N = Math.min(160, Math.max(24, Math.round(w / 6)));
+      const sA = Math.sin(A);
+      let prev = 0;
+      for (let i = 0; i < N; i++) {
+        const u0 = i / N, u1 = (i + 1) / N;
+        const a1 = (u1 * 2 - 1) * A, am = ((u0 + u1) - 1) * A;
+        const next = i === N - 1 ? w : Math.round((Math.sin(a1) / sA + 1) / 2 * w);
+        const dw = next - prev;
+        if (dw > 0) {
+          x.globalAlpha = 0.45 + 0.55 * Math.cos(am) ** 0.8; // ink fades as the skin turns away
+          x.drawImage(t, u0 * t.width, 0, Math.max(1, (u1 - u0) * t.width), t.height, prev, 0, dw, h);
+        }
+        prev = next;
+      }
+      x.globalAlpha = 1;
+    }
+    wrapCache.key = key;
+    return c;
+  }
+
+  // ---------- Render ----------
+  function drawCover(img, iw, ih, mirror, contain) {
+    const k = contain ? Math.min(W / iw, H / ih) : Math.max(W / iw, H / ih);
+    const dw = iw * k, dh = ih * k;
+    ctx.save();
+    if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    ctx.restore();
+  }
+  function drawBackground() {
+    ctx.fillStyle = "#0b0a0d"; ctx.fillRect(0, 0, W, H);
+    if (state.src === "live") {
+      if (state.frozen) drawCover(state.frozen, state.frozen.width, state.frozen.height, false, false);
+      else if (video.readyState >= 2 && video.videoWidth) drawCover(video, video.videoWidth, video.videoHeight, state.facing === "user", false);
+    } else if (state.src === "photo" && state.photo) {
+      drawCover(state.photo, state.photo.width, state.photo.height, false, true);
+    } else {
+      drawCover(demo, demo.width, demo.height, false, false);
+    }
+  }
+  function drawTattoo() {
+    const t = state.processed; if (!t) return;
+    const base = Math.min(W, H);
+    const w = Math.max(4, Math.round(base * state.scale));
+    const h = Math.max(4, Math.round(w * t.height / t.width));
+    const img = wrapped(Math.min(w, 3000), Math.min(h, 3000));
+    ctx.save();
+    ctx.translate(state.x * W, state.y * H);
+    ctx.rotate(state.rot);
+    if (state.mirror) ctx.scale(-1, 1);
+    ctx.globalCompositeOperation = "multiply";  // ink darkens skin and keeps its texture
+    ctx.globalAlpha = state.opacity;
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+  function frame() {
+    drawBackground();
+    drawTattoo();
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Gestures ----------
+  const ptrs = new Map(); let g = null;
+  function snapGesture() {
+    const p = [...ptrs.values()].map(o => ({ ...o }));
+    g = { x: state.x, y: state.y, s: state.scale, r: state.rot, p };
+  }
+  cv.addEventListener("pointerdown", e => {
+    cv.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    snapGesture(); hideHint();
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const rect = cv.getBoundingClientRect();
+    const p = [...ptrs.values()];
+    if (p.length === 1 && g.p.length === 1) {
+      state.x = clamp(g.x + (p[0].x - g.p[0].x) / rect.width, 0, 1);
+      state.y = clamp(g.y + (p[0].y - g.p[0].y) / rect.height, 0, 1);
+    } else if (p.length >= 2 && g.p.length >= 2) {
+      const [a0, b0] = g.p, [a1, b1] = p;
+      const c0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 }, c1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+      const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y) || 1, d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+      const r0 = Math.atan2(b0.y - a0.y, b0.x - a0.x), r1 = Math.atan2(b1.y - a1.y, b1.x - a1.x);
+      state.scale = clamp(g.s * d1 / d0, 0.05, 1.2);
+      state.rot = normAngle(g.r + (r1 - r0));
+      state.x = clamp(g.x + (c1.x - c0.x) / rect.width, 0, 1);
+      state.y = clamp(g.y + (c1.y - c0.y) / rect.height, 0, 1);
+    }
+    syncControls();
+  });
+  const endPtr = e => { ptrs.delete(e.pointerId); snapGesture(); };
+  cv.addEventListener("pointerup", endPtr);
+  cv.addEventListener("pointercancel", endPtr);
+  cv.addEventListener("wheel", e => {
+    e.preventDefault();
+    if (e.shiftKey) state.rot = normAngle(state.rot + e.deltaY * 0.002);
+    else state.scale = clamp(state.scale * Math.exp(-e.deltaY * 0.0012), 0.05, 1.2);
+    syncControls(); hideHint();
+  }, { passive: false });
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const normAngle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+  let hintHidden = false;
+  function hideHint() { if (hintHidden) return; hintHidden = true; $("hint").style.opacity = "0"; }
+
+  // ---------- Controls ----------
+  const sliders = {
+    sSize: { get: () => Math.round(state.scale * 100), set: v => state.scale = v / 100, fmt: v => v + "%" },
+    sRot: { get: () => Math.round(state.rot * 180 / Math.PI), set: v => state.rot = v * Math.PI / 180, fmt: v => v + "°" },
+    sWrap: { get: () => Math.round(state.wrap * 100), set: v => state.wrap = v / 100, fmt: v => v + "%" },
+    sOpacity: { get: () => Math.round(state.opacity * 100), set: v => state.opacity = v / 100, fmt: v => v + "%" },
+    sThr: { get: () => Math.round(state.thr * 100), set: v => { state.thr = v / 100; scheduleProcess(); }, fmt: v => v + "%" },
+  };
+  for (const [id, s] of Object.entries(sliders)) {
+    $(id).addEventListener("input", e => { s.set(+e.target.value); syncControls(); });
+  }
+  function syncControls() {
+    for (const [id, s] of Object.entries(sliders)) {
+      const v = s.get(); const el = $(id);
+      if (document.activeElement !== el) el.value = v;
+      $("o" + id.slice(1)).textContent = s.fmt(v);
+    }
+    $("mirror").setAttribute("aria-pressed", String(state.mirror));
+    document.querySelectorAll("#inkChips button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.ink === state.ink)));
+    $("removeBg").checked = state.removeBg;
+    $("srcLive").setAttribute("aria-pressed", String(state.src === "live"));
+    $("srcPhoto").setAttribute("aria-pressed", String(state.src === "photo"));
+    $("flipCam").hidden = state.src !== "live";
+    $("freeze").hidden = state.src !== "live";
+    $("freeze").setAttribute("aria-pressed", String(!!state.frozen));
+    document.querySelectorAll("#flash button[data-id]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === state.designId)));
+  }
+  let procTimer = 0;
+  function scheduleProcess() { clearTimeout(procTimer); procTimer = setTimeout(() => { processDesign(); }, 60); }
+
+  $("mirror").onclick = () => { state.mirror = !state.mirror; syncControls(); };
+  $("center").onclick = () => { state.x = 0.5; state.y = 0.48; state.rot = 0; syncControls(); };
+  $("removeBg").onchange = e => { state.removeBg = e.target.checked; scheduleProcess(); };
+  $("inkChips").addEventListener("click", e => {
+    const b = e.target.closest("button[data-ink]"); if (!b) return;
+    state.ink = b.dataset.ink;
+    if (state.ink === "healed") state.opacity = Math.min(state.opacity, 0.8);
+    processDesign(); syncControls();
+    try { localStorage.setItem("tattoo-ink", state.ink); } catch (e) {}
+  });
+
+  // tabs
+  const tabs = ["design", "fit", "ink"];
+  tabs.forEach(t => $("tab-" + t).onclick = () => {
+    tabs.forEach(u => { $("tab-" + u).setAttribute("aria-selected", String(u === t)); $("pane-" + u).hidden = u !== t; });
+  });
+
+  // ---------- Designs ----------
+  function setDesign(canvas, id, isUpload = false) {
+    state.raw = canvas; state.designId = id; state.userUpload = isUpload;
+    state.designVersion = (state.designVersion || 0) + 1;
+    processDesign(); syncControls();
+  }
+  const flashEl = $("flash");
+  FLASH.forEach(f => {
+    f.canvas = f.make();
+    const b = document.createElement("button");
+    b.dataset.id = f.id; b.setAttribute("aria-label", f.name); b.title = f.name;
+    const im = new Image(); im.alt = ""; im.src = f.canvas.toDataURL("image/png");
+    b.appendChild(im);
+    b.onclick = () => setDesign(f.canvas, f.id);
+    flashEl.insertBefore(b, $("uploadBtn"));
+  });
+  // compass uses a display font for its "N": redraw once fonts are ready
+  document.fonts && document.fonts.ready.then(() => {
+    const f = FLASH.find(z => z.id === "compass"); f.canvas = f.make();
+    const b = flashEl.querySelector('[data-id="compass"] img'); if (b) b.src = f.canvas.toDataURL("image/png");
+    if (state.designId === "compass") setDesign(f.canvas, "compass");
+  });
+
+  $("uploadBtn").onclick = () => $("designFile").click();
+  $("designFile").onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const img = await loadImage(f);
+      setDesign(toCanvas(img, 1400), "upload", true);
+      say("Design loaded. Pick an ink style, or turn on Color to keep its colors.");
+    } catch (err) { say("Couldn't open that image. Try a PNG or JPG.", true); }
+  };
+  $("scriptGo").onclick = async () => {
+    const c = await drawScript($("scriptText").value.trim() || "Amor fati", $("scriptFont").value);
+    setDesign(c, "script");
+  };
+  $("scriptText").addEventListener("keydown", e => { if (e.key === "Enter") $("scriptGo").click(); });
+
+  function loadImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file); const img = new Image();
+      img.onload = () => { res(img); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("bad image")); };
+      img.src = url;
+    });
+  }
+
+  // ---------- Background sources ----------
+  function stopCamera() {
+    if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+    video.srcObject = null; state.frozen = null;
+  }
+  async function startCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      say(window.isSecureContext ? "This browser can't open the camera. Use Photo instead." : "The camera needs an https:// page. Use Photo, or open the app over https.", true, 7000);
+      return false;
+    }
+    stopCamera();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: state.facing }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      state.stream = stream; video.srcObject = stream;
+      await video.play().catch(() => {});
+      state.src = "live"; syncControls();
+      say("Point the camera at your skin, then drag the design into place.");
+      return true;
+    } catch (err) {
+      const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+      say(denied ? "Camera access is blocked here. Tap Photo to take or choose a picture instead." : "Couldn't start the camera. Tap Photo to use a picture instead.", true, 7000);
+      return false;
+    }
+  }
+  $("srcLive").onclick = () => startCamera();
+  $("srcPhoto").onclick = () => $("photoFile").click();
+  $("photoFile").onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const img = await loadImage(f);
+      stopCamera();
+      state.photo = toCanvas(img, 2400); state.src = "photo"; syncControls();
+      say("Photo loaded. Drag, pinch and wrap the design to fit.");
+    } catch (err) { say("Couldn't open that photo. Try a JPG or PNG.", true); }
+  };
+  $("flipCam").onclick = () => { state.facing = state.facing === "user" ? "environment" : "user"; startCamera(); };
+  $("freeze").onclick = () => {
+    if (state.frozen) { state.frozen = null; video.play().catch(() => {}); }
+    else if (video.videoWidth) {
+      const c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+      const x = c.getContext("2d");
+      if (state.facing === "user") { x.translate(c.width, 0); x.scale(-1, 1); }
+      x.drawImage(video, 0, 0); state.frozen = c; video.pause();
+    }
+    syncControls();
+  };
+
+  // ---------- Capture ----------
+  let lastBlob = null, lastUrl = "";
+  $("shoot").onclick = () => {
+    cv.toBlob(blob => {
+      if (!blob) { say("Couldn't capture the picture.", true); return; }
+      lastBlob = blob;
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = URL.createObjectURL(blob);
+      $("resultImg").src = lastUrl;
+      $("result").hidden = false;
+      const canShare = !!(navigator.canShare && navigator.canShare({ files: [new File([blob], "tattoo.jpg", { type: "image/jpeg" })] }));
+      $("shareBtn").hidden = !canShare || !!window.claude;
+    }, "image/jpeg", 0.92);
+  };
+  $("closeResult").onclick = () => { $("result").hidden = true; };
+  $("saveBtn").onclick = async () => {
+    if (!lastBlob) return;
+    const name = `tattoo-preview-${Date.now()}.jpg`;
+    if (window.claude && window.claude.use) {
+      const dl = await window.claude.use("downloads");
+      if (dl) {
+        try { await dl.save({ filename: name, data: lastBlob }); $("resultNote").textContent = "Saved."; }
+        catch (err) { $("resultNote").textContent = err && err.code === "declined" ? "Not saved." : "Saving isn't available here. Press and hold the picture to save it."; }
+        return;
+      }
+      $("resultNote").textContent = "Press and hold the picture to save it.";
+      return;
+    }
+    const a = document.createElement("a"); a.href = lastUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  };
+  $("shareBtn").onclick = async () => {
+    try { await navigator.share({ files: [new File([lastBlob], "tattoo-preview.jpg", { type: "image/jpeg" })], title: "Tattoo preview" }); } catch (e) {}
+  };
+
+  // ---------- Boot ----------
+  try { const ink = localStorage.getItem("tattoo-ink"); if (ink && ["stencil", "fresh", "healed", "color"].includes(ink)) state.ink = ink; } catch (e) {}
+  resize();
+  setDesign(FLASH[0].canvas, FLASH[0].id);
+  syncControls();
+  say("Demo arm shown. Tap Live for your camera, or Photo to use a picture of your skin.", false, 6000);
+  requestAnimationFrame(frame);
+})();
+</script>
+<!--APP-END-->
+</body>
+</html>
